@@ -18,7 +18,6 @@ type (
 		pc  int
 		mem []int
 		inp int
-		out int
 	}
 )
 
@@ -27,7 +26,6 @@ func NewMachine(mem []int, inp int) *Machine {
 		pc:  0,
 		mem: mem,
 		inp: inp,
-		out: 0,
 	}
 }
 
@@ -68,8 +66,7 @@ func (m *Machine) evalArg(mode int, arg int) int {
 	}
 }
 
-func (m *Machine) Exec() (bool, bool) {
-	out := false
+func (m *Machine) Exec() bool {
 	op, a1, a2, _ := decodeOp(m.mem[m.pc])
 	switch op {
 	case 1:
@@ -90,9 +87,8 @@ func (m *Machine) Exec() (bool, bool) {
 		m.pc += 2
 	case 4:
 		arg1 := m.mem[m.pc+1]
-		m.out = m.evalArg(a1, arg1)
+		fmt.Println(m.evalArg(a1, arg1))
 		m.pc += 2
-		out = true
 	case 5:
 		arg1 := m.mem[m.pc+1]
 		arg2 := m.mem[m.pc+2]
@@ -131,22 +127,15 @@ func (m *Machine) Exec() (bool, bool) {
 		m.pc += 4
 	case 99:
 		m.pc += 1
-		return false, false
+		return false
 	default:
 		log.Fatal("Illegal op code", m.pc, m.mem[m.pc])
 	}
-	return out, true
+	return true
 }
 
 func (m *Machine) Execute() {
-	for {
-		out, ok := m.Exec()
-		if !ok {
-			break
-		}
-		if out {
-			fmt.Println(m.out)
-		}
+	for m.Exec() {
 	}
 }
 
