@@ -1,6 +1,6 @@
 .PHONY: run rs run-rs build-rs
 
-DAY=00
+DAY=06
 
 run:
 	go run main.go
