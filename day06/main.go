@@ -34,22 +34,29 @@ func (m *OrbitsMap) Traverse(a string, depth int) int {
 	return c
 }
 
-func (m *OrbitsMap) GetPath(target, a string) []string {
-	if _, ok := m.orbits[a]; !ok {
+func (m *OrbitsMap) GetPath(from, to string) []string {
+	if _, ok := m.orbits[from]; !ok {
 		return nil
 	}
 
-	if _, ok := m.orbits[a][target]; ok {
-		return []string{target}
+	if _, ok := m.orbits[from][to]; ok {
+		return []string{from}
 	}
 
-	for i := range m.orbits[a] {
-		k := m.GetPath(target, i)
+	for i := range m.orbits[from] {
+		k := m.GetPath(i, to)
 		if k != nil {
-			return append(k, a)
+			return append(k, from)
 		}
 	}
 	return nil
+}
+
+func ReverseSlice(x []string) []string {
+	for i := 0; i < len(x)/2; i++ {
+		x[i], x[len(x)-i-1] = x[len(x)-i-1], x[i]
+	}
+	return x
 }
 
 func main() {
@@ -78,19 +85,13 @@ func main() {
 	}
 
 	fmt.Println(orbits.Traverse("COM", 0))
-	x := orbits.GetPath("YOU", "COM")
-	y := orbits.GetPath("SAN", "COM")
 
-	for i := 0; i < len(x)/2; i++ {
-		x[i], x[len(x)-i-1] = x[len(x)-i-1], x[i]
-	}
-	for i := 0; i < len(y)/2; i++ {
-		y[i], y[len(y)-i-1] = y[len(y)-i-1], y[i]
-	}
+	x := ReverseSlice(orbits.GetPath("COM", "YOU"))
+	y := ReverseSlice(orbits.GetPath("COM", "SAN"))
 
 	for i := 0; i < len(x) && i < len(y); i++ {
 		if x[i] != y[i] {
-			fmt.Println(len(x) - i + len(y) - i - 2)
+			fmt.Println(len(x) - i + len(y) - i)
 			break
 		}
 	}
