@@ -212,13 +212,13 @@ func main() {
 
 	{
 		maxOut := 0
-		Perm([]int{0, 1, 2, 3, 4}, func(phase []int) {
+		Perm([]int{0, 1, 2, 3, 4}, func(phases []int) {
 			out := 0
-			for i := 0; i < len(phase); i++ {
+			for _, phase := range phases {
 				mem := make([]int, len(tokens))
 				copy(mem, tokens)
 				m := NewMachine(mem)
-				m.Write(phase[i])
+				m.Write(phase)
 				m.Write(out)
 				m.Execute()
 				out = m.Read()

@@ -153,15 +153,21 @@ impl Machine {
         }
     }
 
-    fn execute(&mut self) -> Result<(), (bool, i32)> {
+    fn execute(&mut self) {
         loop {
             match self.exec() {
                 Ok(ok) => {
                     if !ok {
-                        return Ok(());
+                        return;
                     }
                 }
-                Err(k) => return Err(k),
+                Err((mode, k)) => {
+                    if mode {
+                        panic!("invalid arg mode: {}", k);
+                    } else {
+                        panic!("invalid op code: {}", k);
+                    }
+                }
             }
         }
     }
@@ -183,22 +189,10 @@ fn main() {
 
     {
         let mut m = Machine::new(nums.clone(), 1);
-        if let Err((mode, k)) = m.execute() {
-            if mode {
-                panic!("invalid arg mode: {}", k);
-            } else {
-                panic!("invalid op code: {}", k);
-            }
-        }
+        m.execute();
     }
     {
         let mut m = Machine::new(nums.clone(), 5);
-        if let Err((mode, k)) = m.execute() {
-            if mode {
-                panic!("invalid arg mode: {}", k);
-            } else {
-                panic!("invalid op code: {}", k);
-            }
-        }
+        m.execute();
     }
 }
