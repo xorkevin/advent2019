@@ -1,11 +1,11 @@
 use crossbeam::channel;
 use crossbeam::channel::{Receiver, Sender};
+use crossbeam::thread;
 use permutohedron;
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::thread;
 
 const PUZZLEINPUT: &str = "input.txt";
 
@@ -274,7 +274,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .map(|_| channel::unbounded())
                     .collect::<Vec<_>>();
 
-                let mut threads = Vec::new();
+                let mut machines = Vec::new();
                 for (i, &phase) in phases.iter().enumerate() {
                     let prev = (i + chans.len() - 1) % chans.len();
                     match chans[prev].0.send(phase) {
@@ -286,19 +286,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     };
                     let rcv = chans[prev].1.clone();
                     let send = chans[i].0.clone();
-                    let tokens = tokens.clone();
-                    threads.push(thread::spawn(move || {
-                        let mut m = Machine::new(tokens, rcv, send);
-                        match m.execute() {
-                            Ok(_) => Ok(m.out_gauge),
-                            Err(e) => {
-                                eprintln!("{}", e);
-                                Err(())
-                            }
-                        }
-                    }));
+                    machines.push(Machine::new(tokens.clone(), rcv, send));
                 }
-
                 match chans[chans.len() - 1].0.send(0) {
                     Ok(_) => (),
                     Err(e) => {
@@ -307,29 +296,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
 
-                let mut t_ok = true;
-                let mut res = 0;
-                for t in threads {
-                    let k = match t.join() {
-                        Ok(k) => k,
-                        Err(_) => {
-                            eprintln!("thread panicked");
-                            t_ok = false;
-                            continue;
-                        }
-                    };
-                    match k {
-                        Ok(k) => res = k,
-                        Err(_) => {
-                            t_ok = false;
-                        }
+                thread::scope(|s| {
+                    for m in machines.iter_mut() {
+                        s.spawn(move |_| match m.execute() {
+                            Ok(_) => Ok(()),
+                            Err(e) => {
+                                eprintln!("{}", e);
+                                Err(())
+                            }
+                        });
                     }
-                }
-                if !t_ok {
-                    return None;
-                }
-                if res > out {
-                    Some(res)
+                })
+                .unwrap();
+
+                let k = machines[machines.len() - 1].out_gauge;
+                if k > out {
+                    Some(k)
                 } else {
                     Some(out)
                 }
