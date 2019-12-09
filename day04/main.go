@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 )
 
 const (
@@ -10,20 +9,31 @@ const (
 	puzzleInputMax = 767346
 )
 
+func passToDigits(pass int) [6]int {
+	return [6]int{
+		pass / 100000 % 10,
+		pass / 10000 % 10,
+		pass / 1000 % 10,
+		pass / 100 % 10,
+		pass / 10 % 10,
+		pass % 10,
+	}
+}
+
 func isValidPass(pass int) bool {
-	s := strconv.Itoa(pass)
+	s := passToDigits(pass)
 
 	hasDouble := false
 
-	k := byte(s[0])
+	k := s[0]
 	for _, i := range s[1:] {
-		if byte(i) == k {
+		if i == k {
 			hasDouble = true
 		}
-		if byte(i) < k {
+		if i < k {
 			return false
 		}
-		k = byte(i)
+		k = i
 	}
 
 	return hasDouble
@@ -34,14 +44,14 @@ func isValidPass2(pass int) bool {
 		return false
 	}
 
-	s := strconv.Itoa(pass)
+	s := passToDigits(pass)
 
 	hasRun2 := false
 
 	run := 1
-	k := byte(s[0])
+	k := s[0]
 	for _, i := range s[1:] {
-		if byte(i) == k {
+		if i == k {
 			run++
 		} else {
 			if run == 2 {
@@ -49,7 +59,7 @@ func isValidPass2(pass int) bool {
 			}
 			run = 1
 		}
-		k = byte(i)
+		k = i
 	}
 
 	return hasRun2 || run == 2

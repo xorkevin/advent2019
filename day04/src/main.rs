@@ -1,33 +1,35 @@
 const PUZZLE_INPUT_MIN: i32 = 231832;
 const PUZZLE_INPUT_MAX: i32 = 767346;
 
+fn pass_to_digits(pass: i32) -> [i32; 6] {
+    [
+        pass / 100000 % 10,
+        pass / 10000 % 10,
+        pass / 1000 % 10,
+        pass / 100 % 10,
+        pass / 10 % 10,
+        pass % 10,
+    ]
+}
+
 fn is_valid_pass(pass: i32) -> bool {
-    let (_, double, decr) =
-        pass.to_string()
-            .chars()
-            .fold((None, false, false), |(prev, has_double, decr), i| {
-                if let Some(p) = prev {
-                    (Some(i), has_double || i == p, decr || i < p)
-                } else {
-                    (Some(i), has_double, decr)
-                }
-            });
+    let (_, double, decr) = pass_to_digits(pass)
+        .into_iter()
+        .fold((-1, false, false), |(prev, has_double, decr), &i| {
+            (i, has_double || i == prev, decr || i < prev)
+        });
     double && !decr
 }
 
 fn is_valid_pass2(pass: i32) -> bool {
     let (_, run, has_run2) =
-        pass.to_string()
-            .chars()
-            .fold((None, 0, false), |(prev, run, has_run2), i| {
-                if let Some(p) = prev {
-                    if i == p {
-                        (Some(i), run + 1, has_run2)
-                    } else {
-                        (Some(i), 1, has_run2 || run == 2)
-                    }
+        pass_to_digits(pass)
+            .into_iter()
+            .fold((-1, 0, false), |(prev, run, has_run2), &i| {
+                if i == prev {
+                    (i, run + 1, has_run2)
                 } else {
-                    (Some(i), 1, has_run2)
+                    (i, 1, has_run2 || run == 2)
                 }
             });
     (has_run2 || run == 2) && is_valid_pass(pass)
