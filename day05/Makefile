@@ -1,14 +1,36 @@
-.PHONY: run rs run-rs build-rs
+.PHONY: run bench go run-go build-go rs run-rs build-rs
 
-DAY=05
+BIN=$(notdir $(CURDIR))
+
+GOBIN=./bin/$(BIN)
+RSBIN=./target/release/$(BIN)
+
+GOSRC=$(shell find . -type f -name '*.go')
+RSSRC=$(shell find . -type f -name '*.rs')
 
 run:
 	go run main.go
 
+bench: build-go build-rs
+	hyperfine $(GOBIN)
+	hyperfine $(RSBIN)
+
+go: build-go run-go
+
+run-go:
+	$(GOBIN)
+
+build-go: $(GOBIN)
+
+$(GOBIN): $(GOSRC)
+	go build -o $(GOBIN)
+
 rs: build-rs run-rs
 
 run-rs:
-	./target/release/day$(DAY)
+	$(RSBIN)
 
-build-rs:
+build-rs: $(RSBIN)
+
+$(RSBIN): $(RSSRC)
 	cargo build --release
