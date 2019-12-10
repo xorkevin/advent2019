@@ -14,7 +14,7 @@ enum Mode {
 }
 
 impl Mode {
-    fn i_to_a(mode: i32) -> Result<Self, i32> {
+    fn i_to_a(mode: i64) -> Result<Self, i64> {
         match mode {
             0 => Ok(Self::Pos),
             1 => Ok(Self::Imm),
@@ -26,16 +26,16 @@ impl Mode {
 
 struct Machine {
     id: u32,
-    pc: i32,
-    mem: Vec<i32>,
-    inp: mpsc::Receiver<i32>,
-    out: mpsc::Sender<i32>,
-    out_gauge: i32,
-    rel_base: i32,
+    pc: i64,
+    mem: Vec<i64>,
+    inp: mpsc::Receiver<i64>,
+    out: mpsc::Sender<i64>,
+    out_gauge: i64,
+    rel_base: i64,
 }
 
 impl Machine {
-    fn new(id: u32, mem: Vec<i32>, inp: mpsc::Receiver<i32>, out: mpsc::Sender<i32>) -> Self {
+    fn new(id: u32, mem: Vec<i64>, inp: mpsc::Receiver<i64>, out: mpsc::Sender<i64>) -> Self {
         Self {
             id,
             pc: 0,
@@ -47,7 +47,7 @@ impl Machine {
         }
     }
 
-    fn decode_op(code: i32) -> Result<(i32, Mode, Mode, Mode), i32> {
+    fn decode_op(code: i64) -> Result<(i64, Mode, Mode, Mode), i64> {
         let op = code % 100;
         let m1 = match Mode::i_to_a(code / 100 % 10) {
             Ok(m) => m,
@@ -64,11 +64,11 @@ impl Machine {
         Ok((op, m1, m2, m3))
     }
 
-    fn get_mem(&self, pos: i32) -> i32 {
+    fn get_mem(&self, pos: i64) -> i64 {
         self.mem[pos as usize]
     }
 
-    fn eval_arg(&self, mode: Mode, arg: i32) -> i32 {
+    fn eval_arg(&self, mode: Mode, arg: i64) -> i64 {
         match mode {
             Mode::Pos => self.get_mem(arg),
             Mode::Imm => arg,
@@ -76,15 +76,16 @@ impl Machine {
         }
     }
 
-    fn get_arg(&self, mode: Mode, offset: i32) -> i32 {
-        self.eval_arg(mode, self.get_mem(self.pc + offset))
+    fn get_arg(&self, mode: Mode, offset: i64) -> i64 {
+        let arg = self.get_mem(self.pc + offset);
+        self.eval_arg(mode, arg)
     }
 
-    fn set_mem(&mut self, pos: i32, val: i32) {
+    fn set_mem(&mut self, pos: i64, val: i64) {
         self.mem[pos as usize] = val;
     }
 
-    fn set_arg(&mut self, mode: Mode, offset: i32, val: i32) -> Result<(), Box<dyn Error>> {
+    fn set_arg(&mut self, mode: Mode, offset: i64, val: i64) -> Result<(), String> {
         let arg = self.get_mem(self.pc + offset);
         match mode {
             Mode::Pos => self.set_mem(arg, val),
@@ -96,15 +97,15 @@ impl Machine {
         Ok(())
     }
 
-    fn step_pc(&mut self, offset: i32) {
+    fn step_pc(&mut self, offset: i64) {
         self.pc += offset;
     }
 
-    async fn recv_inp(&mut self) -> Option<i32> {
+    async fn recv_inp(&mut self) -> Option<i64> {
         self.inp.recv().await
     }
 
-    async fn send_out(&mut self, out: i32) -> Result<(), mpsc::error::SendError<i32>> {
+    async fn send_out(&mut self, out: i64) -> Result<(), mpsc::error::SendError<i64>> {
         self.out_gauge = out;
         self.out.send(out).await
     }
@@ -184,7 +185,7 @@ impl Machine {
             _ => {
                 return Err(
                     format!("Invalid op code: {}: {}", self.pc, self.get_mem(self.pc)).into(),
-                )
+                );
             }
         }
         Ok(true)
@@ -195,12 +196,10 @@ impl Machine {
             match self.exec().await {
                 Ok(ok) => {
                     if !ok {
-                        self.inp.close();
                         return Ok(());
                     }
                 }
                 Err(k) => {
-                    self.inp.close();
                     return Err(format!("Machine {}: {}", self.id, k).into());
                 }
             }
@@ -208,9 +207,10 @@ impl Machine {
     }
 }
 
-fn copy_vec(dest: &mut Vec<i32>, src: &Vec<i32>) {
-    for i in 0..std::cmp::min(dest.len(), src.len()) {
-        dest[i] = src[i];
+fn copy_vec<T: Copy>(dest: &mut Vec<T>, src: &Vec<T>) {
+    let k = std::cmp::min(dest.len(), src.len());
+    for i in 0..k {
+        dest[i] = src[i]
     }
 }
 
@@ -223,7 +223,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut tokens = Vec::new();
         for line in reader.lines() {
             for i in line.expect("Failed to read line").split(",") {
-                tokens.push(i.parse::<i32>().expect("Failed to parse num"));
+                tokens.push(i.parse::<i64>().expect("Failed to parse num"));
             }
         }
         tokens
@@ -235,6 +235,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (mut tx, rx) = mpsc::channel(2);
         let (ntx, mut nrx) = mpsc::channel(2);
         tx.send(1).await?;
+        let thread = tokio::spawn(async move {
+            let mut m = Machine::new(0, mem, rx, ntx);
+            let _ = m.execute().await;
+        });
+        while let Some(k) = nrx.recv().await {
+            println!("{}", k);
+        }
+        thread.await?;
+    }
+    {
+        let mut mem = vec![0; RAM_SIZE];
+        copy_vec(&mut mem, &tokens);
+        let (mut tx, rx) = mpsc::channel(2);
+        let (ntx, mut nrx) = mpsc::channel(2);
+        tx.send(2).await?;
         let thread = tokio::spawn(async move {
             let mut m = Machine::new(0, mem, rx, ntx);
             let _ = m.execute().await;
