@@ -235,7 +235,7 @@ func main() {
 	}
 
 	{
-		mem := make([]int, 8192)
+		mem := make([]int, ramSize)
 		copy(mem, tokens)
 		m := NewMachine(mem)
 		m.Write(1)
@@ -249,7 +249,7 @@ func main() {
 		}
 	}
 	{
-		mem := make([]int, 8192)
+		mem := make([]int, ramSize)
 		copy(mem, tokens)
 		m := NewMachine(mem)
 		m.Write(2)
