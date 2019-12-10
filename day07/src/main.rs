@@ -1,11 +1,9 @@
-use crossbeam::channel;
-use crossbeam::channel::{Receiver, Sender};
-use crossbeam::thread;
 use permutohedron;
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
+use tokio::sync::mpsc;
 
 const PUZZLEINPUT: &str = "input.txt";
 
@@ -25,16 +23,18 @@ impl Mode {
 }
 
 struct Machine {
+    id: u32,
     pc: usize,
     mem: Vec<i32>,
-    inp: Receiver<i32>,
-    out: Sender<i32>,
+    inp: mpsc::Receiver<i32>,
+    out: mpsc::Sender<i32>,
     out_gauge: i32,
 }
 
 impl Machine {
-    fn new(mem: Vec<i32>, inp: Receiver<i32>, out: Sender<i32>) -> Self {
+    fn new(id: u32, mem: Vec<i32>, inp: mpsc::Receiver<i32>, out: mpsc::Sender<i32>) -> Self {
         Self {
+            id,
             pc: 0,
             mem,
             inp,
@@ -75,16 +75,16 @@ impl Machine {
         self.pc += offset;
     }
 
-    fn recv_inp(&self) -> Result<i32, channel::RecvError> {
-        self.inp.recv()
+    async fn recv_inp(&mut self) -> Option<i32> {
+        self.inp.recv().await
     }
 
-    fn send_out(&mut self, out: i32) -> Result<(), channel::SendError<i32>> {
+    async fn send_out(&mut self, out: i32) -> Result<(), mpsc::error::SendError<i32>> {
         self.out_gauge = out;
-        self.out.send(out)
+        self.out.send(out).await
     }
 
-    fn exec(&mut self) -> Result<bool, Box<dyn Error>> {
+    async fn exec(&mut self) -> Result<bool, Box<dyn Error>> {
         let (op, a1, a2, _) = match Self::decode_op(self.mem[self.pc]) {
             Ok(k) => k,
             Err(e) => return Err(format!("Invalid arg mode: {}", e).into()),
@@ -109,10 +109,10 @@ impl Machine {
             }
             3 => {
                 let arg1 = self.get_arg(1) as usize;
-                self.mem[arg1] = match self.recv_inp() {
-                    Ok(k) => k,
-                    Err(e) => {
-                        return Err(format!("Failed to read: {}", e).into());
+                self.mem[arg1] = match self.recv_inp().await {
+                    Some(k) => k,
+                    None => {
+                        return Err("Failed to read".into());
                     }
                 };
                 self.step_pc(2);
@@ -120,10 +120,10 @@ impl Machine {
             }
             4 => {
                 let arg1 = self.get_arg(1);
-                match self.send_out(self.eval_arg(a1, arg1)) {
+                match self.send_out(self.eval_arg(a1, arg1)).await {
                     Ok(_) => (),
-                    Err(_) => {
-                        return Err("Failed to send".into());
+                    Err(e) => {
+                        return Err(format!("Failed to send: {}", e).into());
                     }
                 };
                 self.step_pc(2);
@@ -181,23 +181,24 @@ impl Machine {
         }
     }
 
-    fn execute(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn execute(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
-            match self.exec() {
+            match self.exec().await {
                 Ok(ok) => {
                     if !ok {
                         return Ok(());
                     }
                 }
                 Err(k) => {
-                    return Err(k);
+                    return Err(format!("Machine {}: {}", self.id, k).into());
                 }
             }
         }
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main(threaded_scheduler)]
+async fn main() -> Result<(), Box<dyn Error>> {
     let file = File::open(PUZZLEINPUT).expect("Failed to open file");
     let reader = BufReader::new(file);
 
@@ -218,13 +219,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         for phases in permutations {
             let mut k = 0;
             for phase in phases.into_iter() {
-                let (tx, rx) = channel::unbounded();
-                let (ntx, nrx) = channel::unbounded();
-                let mut m = Machine::new(tokens.clone(), rx, ntx);
-                tx.send(phase)?;
-                tx.send(k)?;
-                m.execute()?;
-                k = nrx.recv()?;
+                let (mut tx, rx) = mpsc::channel(2);
+                let (ntx, mut nrx) = mpsc::channel(2);
+                let mut m = Machine::new(0, tokens.clone(), rx, ntx);
+                tx.send(phase).await?;
+                tx.send(k).await?;
+                m.execute().await?;
+                k = nrx.recv().await.unwrap();
             }
             if k > max {
                 max = k;
@@ -238,43 +239,41 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut permutations = (5..10).collect::<Vec<_>>();
         let permutations = permutohedron::Heap::new(&mut permutations);
         for phases in permutations {
-            let (send_chans, recv_chans) = {
-                let mut send_chans = Vec::with_capacity(phases.len());
-                let mut recv_chans = Vec::with_capacity(phases.len());
-                for _ in 0..phases.len() {
-                    let (s, r) = channel::unbounded();
-                    send_chans.push(s);
-                    recv_chans.push(r);
-                }
-                recv_chans.rotate_left(1);
-                (send_chans, recv_chans)
-            };
+            let len = phases.len();
+            let mut send_chans = Vec::with_capacity(len);
+            let mut recv_chans = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (s, r) = mpsc::channel(2);
+                send_chans.push(s);
+                recv_chans.push(r);
+            }
+            recv_chans.rotate_left(1);
 
             for (i, phase) in phases.into_iter().enumerate() {
-                let prev = (i + send_chans.len() - 1) % send_chans.len();
-                send_chans[prev].send(phase)?;
+                let prev = (i + len - 1) % len;
+                send_chans[prev].send(phase).await?;
             }
-            send_chans[send_chans.len() - 1].send(0)?;
+            send_chans[len - 1].send(0).await?;
 
-            let mut machines = Vec::new();
-            for (send, recv) in send_chans.into_iter().zip(recv_chans.into_iter()) {
-                machines.push(Machine::new(tokens.clone(), recv, send));
+            let mut threads = Vec::with_capacity(len);
+            for (i, (send, recv)) in send_chans
+                .into_iter()
+                .zip(recv_chans.into_iter())
+                .enumerate()
+            {
+                let tokens = tokens.clone();
+                threads.push(tokio::spawn(async move {
+                    let mut m = Machine::new(i as u32, tokens, recv, send);
+                    let _ = m.execute().await;
+                    m.out_gauge
+                }));
             }
 
-            thread::scope(|s| {
-                for m in machines.iter_mut() {
-                    s.spawn(move |_| match m.execute() {
-                        Ok(_) => Ok(()),
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            Err(())
-                        }
-                    });
-                }
-            })
-            .unwrap();
+            let mut k = -1;
+            for t in threads.iter_mut() {
+                k = t.await?;
+            }
 
-            let k = machines[machines.len() - 1].out_gauge;
             if k > max {
                 max = k;
             }
