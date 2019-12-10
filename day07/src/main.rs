@@ -212,115 +212,73 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     {
-        let max =
-            permutohedron::Heap::new(&mut (0..5).collect::<Vec<_>>()).try_fold(0, |out, phases| {
-                let k = phases.iter().try_fold(0, |out, &phase| {
-                    let (tx, rx) = channel::unbounded();
-                    let (ntx, nrx) = channel::unbounded();
-                    let mut m = Machine::new(tokens.clone(), rx, ntx);
-                    match tx.send(phase) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            return None;
-                        }
-                    };
-                    match tx.send(out) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            return None;
-                        }
-                    };
-                    match m.execute() {
-                        Ok(_) => (),
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            return None;
-                        }
-                    };
-                    match nrx.recv() {
-                        Ok(k) => Some(k),
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            None
-                        }
-                    }
-                });
-                match k {
-                    Some(k) => {
-                        if k > out {
-                            Some(k)
-                        } else {
-                            Some(out)
-                        }
-                    }
-                    None => None,
-                }
-            });
-        let max = match max {
-            Some(k) => k,
-            None => return Err("Failed to run".into()),
-        };
+        let mut max = -1;
+        let mut permutations = (0..5).collect::<Vec<_>>();
+        let permutations = permutohedron::Heap::new(&mut permutations);
+        for phases in permutations {
+            let mut k = 0;
+            for phase in phases.into_iter() {
+                let (tx, rx) = channel::unbounded();
+                let (ntx, nrx) = channel::unbounded();
+                let mut m = Machine::new(tokens.clone(), rx, ntx);
+                tx.send(phase)?;
+                tx.send(k)?;
+                m.execute()?;
+                k = nrx.recv()?;
+            }
+            if k > max {
+                max = k;
+            }
+        }
         println!("{}", max);
     }
 
     {
-        let max = permutohedron::Heap::new(&mut (5..10).collect::<Vec<_>>()).try_fold(
-            0,
-            |out, phases| {
-                let chans = phases
-                    .iter()
-                    .map(|_| channel::unbounded())
-                    .collect::<Vec<_>>();
+        let mut max = -1;
+        let mut permutations = (5..10).collect::<Vec<_>>();
+        let permutations = permutohedron::Heap::new(&mut permutations);
+        for phases in permutations {
+            let (send_chans, recv_chans) = {
+                let mut send_chans = Vec::with_capacity(phases.len());
+                let mut recv_chans = Vec::with_capacity(phases.len());
+                for _ in 0..phases.len() {
+                    let (s, r) = channel::unbounded();
+                    send_chans.push(s);
+                    recv_chans.push(r);
+                }
+                recv_chans.rotate_left(1);
+                (send_chans, recv_chans)
+            };
 
-                let mut machines = Vec::new();
-                for (i, &phase) in phases.iter().enumerate() {
-                    let prev = (i + chans.len() - 1) % chans.len();
-                    match chans[prev].0.send(phase) {
-                        Ok(_) => (),
+            for (i, phase) in phases.into_iter().enumerate() {
+                let prev = (i + send_chans.len() - 1) % send_chans.len();
+                send_chans[prev].send(phase)?;
+            }
+            send_chans[send_chans.len() - 1].send(0)?;
+
+            let mut machines = Vec::new();
+            for (send, recv) in send_chans.into_iter().zip(recv_chans.into_iter()) {
+                machines.push(Machine::new(tokens.clone(), recv, send));
+            }
+
+            thread::scope(|s| {
+                for m in machines.iter_mut() {
+                    s.spawn(move |_| match m.execute() {
+                        Ok(_) => Ok(()),
                         Err(e) => {
                             eprintln!("{}", e);
-                            return None;
+                            Err(())
                         }
-                    };
-                    let rcv = chans[prev].1.clone();
-                    let send = chans[i].0.clone();
-                    machines.push(Machine::new(tokens.clone(), rcv, send));
+                    });
                 }
-                match chans[chans.len() - 1].0.send(0) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        return None;
-                    }
-                };
+            })
+            .unwrap();
 
-                thread::scope(|s| {
-                    for m in machines.iter_mut() {
-                        s.spawn(move |_| match m.execute() {
-                            Ok(_) => Ok(()),
-                            Err(e) => {
-                                eprintln!("{}", e);
-                                Err(())
-                            }
-                        });
-                    }
-                })
-                .unwrap();
-
-                let k = machines[machines.len() - 1].out_gauge;
-                if k > out {
-                    Some(k)
-                } else {
-                    Some(out)
-                }
-            },
-        );
-        let max = match max {
-            Some(k) => k,
-            None => return Err("Failed to run".into()),
-        };
+            let k = machines[machines.len() - 1].out_gauge;
+            if k > max {
+                max = k;
+            }
+        }
         println!("{}", max);
     }
 
