@@ -1,5 +1,7 @@
 .PHONY: run bench go run-go build-go rs run-rs build-rs
 
+BENCHARGS=-w 3
+BENCH=hyperfine
 BIN=$(notdir $(CURDIR))
 
 GOBIN=./bin/$(BIN)
@@ -12,8 +14,8 @@ run:
 	go run main.go
 
 bench: build-go build-rs
-	hyperfine $(GOBIN)
-	hyperfine $(RSBIN)
+	$(BENCH) $(BENCHARGS) $(GOBIN)
+	$(BENCH) $(BENCHARGS) $(RSBIN)
 
 go: build-go run-go
 
