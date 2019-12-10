@@ -87,22 +87,26 @@ func (m *Machine) getArg(mode, offset int) int {
 	return m.evalArg(mode, arg)
 }
 
-func (m *Machine) setMem(mode, pos, val int) {
+func (m *Machine) setMem(pos, val int) {
+	m.mem[pos] = val
+}
+
+func (m *Machine) setArg(mode, offset, val int) {
+	arg := m.getMem(m.pc + offset)
 	switch mode {
 	case modePos:
-		m.mem[pos] = val
+		m.setMem(arg, val)
 	case modeImm:
 		log.Fatal("Illegal mem write imm mode")
 	case modeRel:
-		m.mem[pos+m.relBase] = val
+		m.setMem(arg+m.relBase, val)
 	default:
 		log.Fatal("Illegal mem write mode")
 	}
 }
 
-func (m *Machine) setArg(mode, offset, val int) {
-	arg := m.getMem(m.pc + offset)
-	m.setMem(mode, arg, val)
+func (m *Machine) stepPC(offset int) {
+	m.pc += offset
 }
 
 func (m *Machine) Write(inp int) {
@@ -131,27 +135,27 @@ func (m *Machine) Exec() bool {
 	switch op {
 	case 1:
 		m.setArg(a3, 3, m.getArg(a1, 1)+m.getArg(a2, 2))
-		m.pc += 4
+		m.stepPC(4)
 	case 2:
 		m.setArg(a3, 3, m.getArg(a1, 1)*m.getArg(a2, 2))
-		m.pc += 4
+		m.stepPC(4)
 	case 3:
 		m.setArg(a1, 1, m.recvInput())
-		m.pc += 2
+		m.stepPC(2)
 	case 4:
 		m.sendOutput(m.getArg(a1, 1))
-		m.pc += 2
+		m.stepPC(2)
 	case 5:
 		if m.getArg(a1, 1) != 0 {
 			m.pc = m.getArg(a2, 2)
 		} else {
-			m.pc += 3
+			m.stepPC(3)
 		}
 	case 6:
 		if m.getArg(a1, 1) == 0 {
 			m.pc = m.getArg(a2, 2)
 		} else {
-			m.pc += 3
+			m.stepPC(3)
 		}
 	case 7:
 		if m.getArg(a1, 1) < m.getArg(a2, 2) {
@@ -159,19 +163,19 @@ func (m *Machine) Exec() bool {
 		} else {
 			m.setArg(a3, 3, 0)
 		}
-		m.pc += 4
+		m.stepPC(4)
 	case 8:
 		if m.getArg(a1, 1) == m.getArg(a2, 2) {
 			m.setArg(a3, 3, 1)
 		} else {
 			m.setArg(a3, 3, 0)
 		}
-		m.pc += 4
+		m.stepPC(4)
 	case 9:
 		m.relBase += m.getArg(a1, 1)
-		m.pc += 2
+		m.stepPC(2)
 	case 99:
-		m.pc += 1
+		m.stepPC(1)
 		return false
 	default:
 		log.Fatal("Illegal op code", m.pc, m.getMem(m.pc))

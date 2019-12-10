@@ -117,14 +117,12 @@ impl Machine {
 
         match op {
             1 => {
-                self.set_arg(a3, 3, self.get_arg(a1, 1) + self.get_arg(a2, 2));
+                self.set_arg(a3, 3, self.get_arg(a1, 1) + self.get_arg(a2, 2))?;
                 self.step_pc(4);
-                Ok(true)
             }
             2 => {
-                self.set_arg(a3, 3, self.get_arg(a1, 1) * self.get_arg(a2, 2));
+                self.set_arg(a3, 3, self.get_arg(a1, 1) * self.get_arg(a2, 2))?;
                 self.step_pc(4);
-                Ok(true)
             }
             3 => {
                 let inp = match self.recv_inp().await {
@@ -133,9 +131,8 @@ impl Machine {
                         return Err("Failed to read".into());
                     }
                 };
-                self.set_arg(a1, 1, inp);
+                self.set_arg(a1, 1, inp)?;
                 self.step_pc(2);
-                Ok(true)
             }
             4 => {
                 match self.send_out(self.get_arg(a1, 1)).await {
@@ -145,7 +142,6 @@ impl Machine {
                     }
                 };
                 self.step_pc(2);
-                Ok(true)
             }
             5 => {
                 if self.get_arg(a1, 1) != 0 {
@@ -153,7 +149,6 @@ impl Machine {
                 } else {
                     self.step_pc(3);
                 }
-                Ok(true)
             }
             6 => {
                 if self.get_arg(a1, 1) == 0 {
@@ -161,37 +156,38 @@ impl Machine {
                 } else {
                     self.step_pc(3);
                 }
-                Ok(true)
             }
             7 => {
                 if self.get_arg(a1, 1) < self.get_arg(a2, 2) {
-                    self.set_arg(a3, 3, 1);
+                    self.set_arg(a3, 3, 1)?;
                 } else {
-                    self.set_arg(a3, 3, 0);
+                    self.set_arg(a3, 3, 0)?;
                 }
                 self.step_pc(4);
-                Ok(true)
             }
             8 => {
                 if self.get_arg(a1, 1) == self.get_arg(a2, 2) {
-                    self.set_arg(a3, 3, 1);
+                    self.set_arg(a3, 3, 1)?;
                 } else {
-                    self.set_arg(a3, 3, 0);
+                    self.set_arg(a3, 3, 0)?;
                 }
                 self.step_pc(4);
-                Ok(true)
             }
             9 => {
                 self.rel_base += self.get_arg(a1, 1);
                 self.step_pc(2);
-                Ok(true)
             }
             99 => {
                 self.step_pc(1);
-                Ok(false)
+                return Ok(false);
             }
-            _ => Err(format!("Invalid op code: {}: {}", self.pc, self.get_mem(self.pc)).into()),
+            _ => {
+                return Err(
+                    format!("Invalid op code: {}: {}", self.pc, self.get_mem(self.pc)).into(),
+                )
+            }
         }
+        Ok(true)
     }
 
     async fn execute(&mut self) -> Result<(), Box<dyn Error>> {
@@ -246,7 +242,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         while let Some(k) = nrx.recv().await {
             println!("{}", k);
         }
-        thread.await;
+        thread.await?;
     }
 
     Ok(())
