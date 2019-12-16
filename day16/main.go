@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	puzzleInput = "input2.txt"
+	puzzleInput = "input.txt"
 )
 
 func Abs(i int) int {
@@ -33,7 +33,7 @@ func (v Vector) PhaseInner(pattern Vector, offset, repeat int) int {
 	for n, i := range v {
 		sum += i * pattern.Ith(n+offset, repeat)
 	}
-	return sum
+	return Abs(sum) % 10
 }
 
 func SliceToNum(nums []int) int {
@@ -51,7 +51,17 @@ func SliceToNum(nums []int) int {
 func (v Vector) Phase(pattern Vector) Vector {
 	next := make(Vector, 0, len(v))
 	for n := range v {
-		next = append(next, Abs(v.PhaseInner(pattern, 1, n+1)%10))
+		next = append(next, v.PhaseInner(pattern, 1, n+1))
+	}
+	return next
+}
+func (v Vector) Phase2(pattern Vector, offset int) Vector {
+	l := len(v)
+	next := make(Vector, l)
+	partial := 0
+	for i := l - 1; i >= offset; i-- {
+		partial = (partial + v[i]) % 10
+		next[i] = partial
 	}
 	return next
 }
@@ -94,19 +104,16 @@ func main() {
 		}
 		fmt.Println(SliceToNum(nums2[0:8]))
 	}
-	//{
-	//	nums2 := make(Vector, 0, len(orignums)*10000)
-	//	for i := 0; i < 10000; i++ {
-	//		nums2 = append(nums2, orignums...)
-	//	}
-	//	pattern := []int{0, 1, 0, -1}
-	//	offset := SliceToNum(nums2[0:7])
-	//	fmt.Println(offset)
-	//	for i := 0; i < 100; i++ {
-	//		nums2 = nums2.Phase(pattern)
-	//		fmt.Println("done", i+1)
-	//	}
-
-	//	fmt.Println(SliceToNum(nums2[offset : offset+8]))
-	//}
+	{
+		nums2 := make(Vector, 0, len(orignums)*10000)
+		for i := 0; i < 10000; i++ {
+			nums2 = append(nums2, orignums...)
+		}
+		pattern := []int{0, 1, 0, -1}
+		offset := SliceToNum(nums2[0:7])
+		for i := 0; i < 100; i++ {
+			nums2 = nums2.Phase2(pattern, offset)
+		}
+		fmt.Println(SliceToNum(nums2[offset : offset+8]))
+	}
 }
