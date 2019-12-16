@@ -55,15 +55,15 @@ func (v Vector) Phase(pattern Vector) Vector {
 	}
 	return next
 }
+
 func (v Vector) Phase2(pattern Vector, offset int) Vector {
 	l := len(v)
-	next := make(Vector, l)
 	partial := 0
 	for i := l - 1; i >= offset; i-- {
 		partial = (partial + v[i]) % 10
-		next[i] = partial
+		v[i] = partial
 	}
-	return next
+	return v
 }
 
 func main() {
@@ -97,23 +97,23 @@ func main() {
 	}
 
 	{
-		nums2 := orignums
+		nums := orignums
 		pattern := []int{0, 1, 0, -1}
 		for i := 0; i < 100; i++ {
-			nums2 = nums2.Phase(pattern)
+			nums = nums.Phase(pattern)
 		}
-		fmt.Println(SliceToNum(nums2[0:8]))
+		fmt.Println(SliceToNum(nums[0:8]))
 	}
 	{
-		nums2 := make(Vector, 0, len(orignums)*10000)
+		nums := make(Vector, 0, len(orignums)*10000)
 		for i := 0; i < 10000; i++ {
-			nums2 = append(nums2, orignums...)
+			nums = append(nums, orignums...)
 		}
 		pattern := []int{0, 1, 0, -1}
-		offset := SliceToNum(nums2[0:7])
+		offset := SliceToNum(nums[0:7])
 		for i := 0; i < 100; i++ {
-			nums2 = nums2.Phase2(pattern, offset)
+			nums = nums.Phase2(pattern, offset)
 		}
-		fmt.Println(SliceToNum(nums2[offset : offset+8]))
+		fmt.Println(SliceToNum(nums[offset : offset+8]))
 	}
 }
