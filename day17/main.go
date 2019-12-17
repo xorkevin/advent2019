@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -189,24 +190,193 @@ func (m *Machine) Execute() {
 	close(m.out)
 }
 
-func inBounds(grid [][]byte, x, y int) bool {
-	return y < len(grid) && y >= 0 && x >= 0 && x < len(grid[0])
+const (
+	dirUp = iota
+	dirDown
+	dirLeft
+	dirRight
+)
+
+type (
+	Bot struct {
+		grid [][]byte
+		w, h int
+		x, y int
+		dir  int
+	}
+)
+
+func isBot(c byte) bool {
+	return c == '^'
 }
 
-func isWall(c byte) bool {
-	return c == '#'
+func NewBot(grid [][]byte) *Bot {
+	bx := -1
+	by := -1
+	for y, i := range grid {
+		for x, j := range i {
+			if isBot(j) {
+				bx = x
+				by = y
+				break
+			}
+		}
+	}
+	return &Bot{
+		grid: grid,
+		w:    len(grid[0]),
+		h:    len(grid),
+		x:    bx,
+		y:    by,
+		dir:  dirUp,
+	}
 }
 
-func isIntersection(grid [][]byte, x, y int) bool {
-	if !isWall(grid[y][x]) {
+func (b *Bot) inBounds(x, y int) bool {
+	return y < b.h && y >= 0 && x >= 0 && x < b.w
+}
+
+func (b *Bot) isPath(x, y int) bool {
+	if !b.inBounds(x, y) {
+		return false
+	}
+	return b.grid[y][x] == '#'
+}
+
+func (b *Bot) isIntersection(x, y int) bool {
+	if !b.isPath(x, y) {
 		return false
 	}
 
-	if !inBounds(grid, x, y-1) || !inBounds(grid, x, y+1) || !inBounds(grid, x-1, y) || !inBounds(grid, x+1, y) {
-		return false
+	return b.isPath(x, y-1) && b.isPath(x, y+1) && b.isPath(x-1, y) && b.isPath(x+1, y)
+}
+
+func (b *Bot) Sum() int {
+	sum := 0
+	for y, i := range b.grid {
+		for x := range i {
+			if b.isIntersection(x, y) {
+				sum += x * y
+			}
+		}
+	}
+	return sum
+}
+
+func (b *Bot) getFLR() (bool, bool, bool) {
+	lx := b.x
+	ly := b.y
+	rx := b.x
+	ry := b.y
+	fx := b.x
+	fy := b.y
+
+	switch b.dir {
+	case dirUp:
+		lx -= 1
+		rx += 1
+		fy -= 1
+	case dirDown:
+		lx += 1
+		rx -= 1
+		fy += 1
+	case dirLeft:
+		ly += 1
+		ry -= 1
+		fx -= 1
+	case dirRight:
+		ly -= 1
+		ry += 1
+		fx += 1
+	default:
+		log.Fatalln("Illegal direction")
 	}
 
-	return isWall(grid[y-1][x]) && isWall(grid[y+1][x]) && isWall(grid[y][x-1]) && isWall(grid[y][x+1])
+	return b.isPath(fx, fy), b.isPath(lx, ly), b.isPath(rx, ry)
+}
+
+func (b *Bot) forward() {
+	switch b.dir {
+	case dirUp:
+		b.y -= 1
+	case dirDown:
+		b.y += 1
+	case dirLeft:
+		b.x -= 1
+	case dirRight:
+		b.x += 1
+	default:
+		log.Fatalln("Illegal direction")
+	}
+}
+
+func (b *Bot) turnLeft() {
+	switch b.dir {
+	case dirUp:
+		b.dir = dirLeft
+	case dirDown:
+		b.dir = dirRight
+	case dirLeft:
+		b.dir = dirDown
+	case dirRight:
+		b.dir = dirUp
+	}
+}
+
+func (b *Bot) turnRight() {
+	switch b.dir {
+	case dirUp:
+		b.dir = dirRight
+	case dirDown:
+		b.dir = dirLeft
+	case dirLeft:
+		b.dir = dirUp
+	case dirRight:
+		b.dir = dirDown
+	}
+}
+
+func (b *Bot) FindDirections() string {
+	instrs := bytes.Buffer{}
+	for {
+		f, l, r := b.getFLR()
+		if !f && !l && !r {
+			break
+		}
+
+		if f {
+			b.forward()
+			instrs.WriteByte('F')
+		} else if l {
+			b.turnLeft()
+			instrs.WriteByte('L')
+		} else {
+			b.turnRight()
+			instrs.WriteByte('R')
+		}
+	}
+
+	run := 0
+	s := strings.Builder{}
+	for _, i := range instrs.Bytes() {
+		if i == 'F' {
+			run++
+			continue
+		}
+		if run > 0 {
+			s.WriteString(strconv.Itoa(run))
+			s.WriteByte(',')
+			run = 0
+		}
+		s.WriteByte(i)
+		s.WriteByte(',')
+	}
+	if run > 0 {
+		s.WriteString(strconv.Itoa(run))
+		s.WriteByte(',')
+		run = 0
+	}
+	return s.String()
 }
 
 func main() {
@@ -264,15 +434,10 @@ func main() {
 		}
 	}
 
-	sum := 0
-	for y, i := range grid {
-		for x := range i {
-			if isIntersection(grid, x, y) {
-				sum += x * y
-			}
-		}
-	}
-	fmt.Println(sum)
+	b := NewBot(grid)
+	fmt.Println(b.Sum())
+
+	fmt.Println(b.FindDirections())
 
 	instructions :=
 		`A,A,B,C,C,A,C,B,C,B
