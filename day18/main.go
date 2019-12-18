@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 )
 
 const (
@@ -17,6 +18,11 @@ type (
 		x, y int
 	}
 
+	SearchState struct {
+		pos  Point
+		keys string
+	}
+
 	Maze struct {
 		grid    [][]byte
 		w, h    int
@@ -25,8 +31,21 @@ type (
 		keyPos  map[byte]Point
 		doors   []byte
 		doorPos map[byte]Point
+		reCache map[SearchState]int
 	}
 )
+
+func ToState(pos Point, keys map[byte]struct{}) SearchState {
+	keySlice := make([]byte, 0, len(keys))
+	for k := range keys {
+		keySlice = append(keySlice, k)
+	}
+	sort.Slice(keySlice, func(i, j int) bool { return keySlice[i] < keySlice[j] })
+	return SearchState{
+		pos:  pos,
+		keys: string(keySlice),
+	}
+}
 
 func isEntrance(c byte) bool {
 	return c == '@'
@@ -78,6 +97,7 @@ func NewMaze(grid [][]byte) *Maze {
 		keyPos:  keyPos,
 		doors:   doors,
 		doorPos: doorPos,
+		reCache: map[SearchState]int{},
 	}
 }
 
@@ -208,31 +228,8 @@ func (m *Maze) neighbors(pos Point, keys map[byte]struct{}) []Point {
 	return points
 }
 
-func (m *Maze) CalcPath(start Point, goal Point, keys map[byte]struct{}) int {
-	openSet := NewOpenSet()
-	openSet.Push(start, 0, Manhattan(start, goal))
-	closedSet := NewClosedSet()
-
-	for !openSet.Empty() {
-		cur, curg, _ := openSet.Pop()
-		closedSet.Push(cur)
-		if cur == goal {
-			return curg
-		}
-
-		for _, neighbor := range m.neighbors(cur, keys) {
-			if closedSet.Has(neighbor) || openSet.Has(neighbor) {
-				continue
-			}
-			openSet.Push(neighbor, curg+1, curg+1+Manhattan(neighbor, goal))
-		}
-	}
-
-	return -1
-}
-
-func (m *Maze) Reachable(start Point, keys map[byte]struct{}) []byte {
-	reachable := []byte{}
+func (m *Maze) Reachable(start Point, keys map[byte]struct{}) map[byte]int {
+	reachable := map[byte]int{}
 	openSet := NewOpenSet()
 	openSet.Push(start, 0, 0)
 	closedSet := NewClosedSet()
@@ -242,7 +239,7 @@ func (m *Maze) Reachable(start Point, keys map[byte]struct{}) []byte {
 		k := m.grid[cur.y][cur.x]
 		if isKey(k) {
 			if _, ok := keys[k]; !ok {
-				reachable = append(reachable, k)
+				reachable[k] = curg
 				continue
 			}
 		}
@@ -257,75 +254,33 @@ func (m *Maze) Reachable(start Point, keys map[byte]struct{}) []byte {
 	return reachable
 }
 
-func Perm(a []byte, f func([]byte)) {
-	perm(a, f, 0)
-}
-
-// Permute the values at index i to len(a)-1.
-func perm(a []byte, f func([]byte), i int) {
-	if i > len(a) {
-		f(a)
-		return
-	}
-	perm(a, f, i+1)
-	for j := i + 1; j < len(a); j++ {
-		a[i], a[j] = a[j], a[i]
-		perm(a, f, i+1)
-		a[i], a[j] = a[j], a[i]
-	}
-}
-
-func (m *Maze) CalcMultiPath(start Point, order []byte) int {
-	dist := 0
-	prev := start
-	keys := map[byte]struct{}{}
-	for _, key := range order {
-		goal := m.keyPos[key]
-		partial := m.CalcPath(prev, goal, keys)
-		if partial < 0 {
-			return -1
-		}
-		dist += partial
-		prev = goal
-		keys[key] = struct{}{}
-	}
-	return dist
-}
-
-//func (m *Maze) Salesman(start Point, allkeys []byte) int {
-//	minPath := -1
-//	Perm(allkeys, func(order []byte) {
-//		dist := m.CalcMultiPath(start, order)
-//		if dist < 0 {
-//			return
-//		}
-//		if minPath < 0 || dist < minPath {
-//			minPath = dist
-//		}
-//	})
-//	return minPath
-//}
-
-func (m *Maze) Salesman(start Point, dist int, keys map[byte]struct{}, curpath []byte) int {
+func (m *Maze) Salesman(start Point, keys map[byte]struct{}) int {
 	if len(keys) >= len(m.keyPos) {
-		//fmt.Println(string(curpath), dist)
-		return dist
+		return 0
+	}
+
+	stateID := ToState(start, keys)
+	if val, ok := m.reCache[stateID]; ok {
+		return val
 	}
 
 	minPath := -1
-	reachable := m.Reachable(start, keys)
-	for _, i := range reachable {
-		goal := m.keyPos[i]
-		partial := m.CalcPath(start, goal, keys)
-		keys[i] = struct{}{}
-		nextDist := m.Salesman(goal, dist+partial, keys, append(curpath, i))
-		delete(keys, i)
-		if nextDist < 0 {
+	for k, i := range m.Reachable(start, keys) {
+		goal := m.keyPos[k]
+		keys[k] = struct{}{}
+		partial := i + m.Salesman(goal, keys)
+		delete(keys, k)
+		if partial < 0 {
 			continue
 		}
-		if minPath < 0 || nextDist < minPath {
-			minPath = nextDist
+		if minPath < 0 || partial < minPath {
+			minPath = partial
 		}
+	}
+
+	m.reCache[stateID] = minPath
+	if k := len(m.reCache); k%100 == 0 {
+		fmt.Println(k)
 	}
 	return minPath
 }
@@ -357,5 +312,5 @@ func main() {
 	for _, i := range maze.grid {
 		fmt.Println(string(i))
 	}
-	fmt.Println(maze.Salesman(maze.enter, 0, map[byte]struct{}{}, []byte{}))
+	fmt.Println(maze.Salesman(maze.enter, map[byte]struct{}{}))
 }
