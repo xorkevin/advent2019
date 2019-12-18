@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -18,34 +20,17 @@ type (
 		x, y int
 	}
 
-	SearchState struct {
-		pos  Point
-		keys string
-	}
-
 	Maze struct {
 		grid    [][]byte
 		w, h    int
-		enter   Point
+		enter   []Point
 		keys    []byte
 		keyPos  map[byte]Point
 		doors   []byte
 		doorPos map[byte]Point
-		reCache map[SearchState]int
+		reCache map[string]int
 	}
 )
-
-func ToState(pos Point, keys map[byte]struct{}) SearchState {
-	keySlice := make([]byte, 0, len(keys))
-	for k := range keys {
-		keySlice = append(keySlice, k)
-	}
-	sort.Slice(keySlice, func(i, j int) bool { return keySlice[i] < keySlice[j] })
-	return SearchState{
-		pos:  pos,
-		keys: string(keySlice),
-	}
-}
 
 func isEntrance(c byte) bool {
 	return c == '@'
@@ -68,7 +53,7 @@ func isPath(c byte) bool {
 }
 
 func NewMaze(grid [][]byte) *Maze {
-	enter := Point{-1, -1}
+	enter := []Point{}
 	keys := []byte{}
 	keyPos := map[byte]Point{}
 	doors := []byte{}
@@ -77,7 +62,7 @@ func NewMaze(grid [][]byte) *Maze {
 	for y, i := range grid {
 		for x, j := range i {
 			if isEntrance(j) {
-				enter = Point{x, y}
+				enter = append(enter, Point{x, y})
 			} else if isKey(j) {
 				keys = append(keys, j)
 				keyPos[j] = Point{x, y}
@@ -97,7 +82,7 @@ func NewMaze(grid [][]byte) *Maze {
 		keyPos:  keyPos,
 		doors:   doors,
 		doorPos: doorPos,
-		reCache: map[SearchState]int{},
+		reCache: map[string]int{},
 	}
 }
 
@@ -254,7 +239,32 @@ func (m *Maze) Reachable(start Point, keys map[byte]struct{}) map[byte]int {
 	return reachable
 }
 
-func (m *Maze) Salesman(start Point, keys map[byte]struct{}) int {
+func (m *Maze) ReachableN(start []Point, keys map[byte]struct{}) []map[byte]int {
+	reachable := make([]map[byte]int, 0, len(start))
+	for _, i := range start {
+		reachable = append(reachable, m.Reachable(i, keys))
+	}
+	return reachable
+}
+
+func ToState(pos []Point, keys map[byte]struct{}) string {
+	s := strings.Builder{}
+	for _, i := range pos {
+		s.WriteString(strconv.Itoa(i.x))
+		s.WriteByte(',')
+		s.WriteString(strconv.Itoa(i.y))
+		s.WriteByte(';')
+	}
+	keySlice := make([]byte, 0, len(keys))
+	for k := range keys {
+		keySlice = append(keySlice, k)
+	}
+	sort.Slice(keySlice, func(i, j int) bool { return keySlice[i] < keySlice[j] })
+	s.Write(keySlice)
+	return s.String()
+}
+
+func (m *Maze) Salesman(start []Point, keys map[byte]struct{}) int {
 	if len(keys) >= len(m.keyPos) {
 		return 0
 	}
@@ -265,23 +275,25 @@ func (m *Maze) Salesman(start Point, keys map[byte]struct{}) int {
 	}
 
 	minPath := -1
-	for k, i := range m.Reachable(start, keys) {
-		goal := m.keyPos[k]
-		keys[k] = struct{}{}
-		partial := i + m.Salesman(goal, keys)
-		delete(keys, k)
-		if partial < 0 {
-			continue
-		}
-		if minPath < 0 || partial < minPath {
-			minPath = partial
+	for n, reachable := range m.ReachableN(start, keys) {
+		for k, i := range reachable {
+			goal := m.keyPos[k]
+			keys[k] = struct{}{}
+			next := make([]Point, len(start))
+			copy(next, start)
+			next[n] = goal
+			partial := i + m.Salesman(next, keys)
+			delete(keys, k)
+			if partial < 0 {
+				continue
+			}
+			if minPath < 0 || partial < minPath {
+				minPath = partial
+			}
 		}
 	}
 
 	m.reCache[stateID] = minPath
-	if k := len(m.reCache); k%100 == 0 {
-		fmt.Println(k)
-	}
 	return minPath
 }
 
@@ -308,9 +320,32 @@ func main() {
 		}
 	}
 
-	maze := NewMaze(grid)
-	for _, i := range maze.grid {
-		fmt.Println(string(i))
+	{
+		maze := NewMaze(grid)
+		fmt.Println(maze.Salesman(maze.enter, map[byte]struct{}{}))
 	}
-	fmt.Println(maze.Salesman(maze.enter, map[byte]struct{}{}))
+	{
+		px := -1
+		py := -1
+		for y, i := range grid {
+			for x, j := range i {
+				if j == '@' {
+					px = x
+					py = y
+					break
+				}
+			}
+		}
+		grid[py][px] = '#'
+		grid[py-1][px] = '#'
+		grid[py+1][px] = '#'
+		grid[py][px-1] = '#'
+		grid[py][px+1] = '#'
+		grid[py-1][px-1] = '@'
+		grid[py-1][px+1] = '@'
+		grid[py+1][px-1] = '@'
+		grid[py+1][px+1] = '@'
+		maze := NewMaze(grid)
+		fmt.Println(maze.Salesman(maze.enter, map[byte]struct{}{}))
+	}
 }
