@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	puzzleInput = "input2.txt"
+	puzzleInput = "input.txt"
 )
 
 type (
@@ -231,6 +231,32 @@ func (m *Maze) CalcPath(start Point, goal Point, keys map[byte]struct{}) int {
 	return -1
 }
 
+func (m *Maze) Reachable(start Point, keys map[byte]struct{}) []byte {
+	reachable := []byte{}
+	openSet := NewOpenSet()
+	openSet.Push(start, 0, 0)
+	closedSet := NewClosedSet()
+	for !openSet.Empty() {
+		cur, curg, _ := openSet.Pop()
+		closedSet.Push(cur)
+		k := m.grid[cur.y][cur.x]
+		if isKey(k) {
+			if _, ok := keys[k]; !ok {
+				reachable = append(reachable, k)
+				continue
+			}
+		}
+
+		for _, neighbor := range m.neighbors(cur, keys) {
+			if closedSet.Has(neighbor) || openSet.Has(neighbor) {
+				continue
+			}
+			openSet.Push(neighbor, curg+1, curg+1)
+		}
+	}
+	return reachable
+}
+
 func Perm(a []byte, f func([]byte)) {
 	perm(a, f, 0)
 }
@@ -266,17 +292,41 @@ func (m *Maze) CalcMultiPath(start Point, order []byte) int {
 	return dist
 }
 
-func (m *Maze) Salesman(start Point, allkeys []byte) int {
+//func (m *Maze) Salesman(start Point, allkeys []byte) int {
+//	minPath := -1
+//	Perm(allkeys, func(order []byte) {
+//		dist := m.CalcMultiPath(start, order)
+//		if dist < 0 {
+//			return
+//		}
+//		if minPath < 0 || dist < minPath {
+//			minPath = dist
+//		}
+//	})
+//	return minPath
+//}
+
+func (m *Maze) Salesman(start Point, dist int, keys map[byte]struct{}, curpath []byte) int {
+	if len(keys) >= len(m.keyPos) {
+		//fmt.Println(string(curpath), dist)
+		return dist
+	}
+
 	minPath := -1
-	Perm(allkeys, func(order []byte) {
-		dist := m.CalcMultiPath(start, order)
-		if dist < 0 {
-			return
+	reachable := m.Reachable(start, keys)
+	for _, i := range reachable {
+		goal := m.keyPos[i]
+		partial := m.CalcPath(start, goal, keys)
+		keys[i] = struct{}{}
+		nextDist := m.Salesman(goal, dist+partial, keys, append(curpath, i))
+		delete(keys, i)
+		if nextDist < 0 {
+			continue
 		}
-		if minPath < 0 || dist < minPath {
-			minPath = dist
+		if minPath < 0 || nextDist < minPath {
+			minPath = nextDist
 		}
-	})
+	}
 	return minPath
 }
 
@@ -307,5 +357,5 @@ func main() {
 	for _, i := range maze.grid {
 		fmt.Println(string(i))
 	}
-	fmt.Println(maze.Salesman(maze.enter, maze.keys))
+	fmt.Println(maze.Salesman(maze.enter, 0, map[byte]struct{}{}, []byte{}))
 }
