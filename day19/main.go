@@ -195,13 +195,18 @@ type (
 	}
 )
 
-func Find100(pos Point, grid map[Point]struct{}) bool {
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 100; x++ {
-			if _, ok := grid[Point{pos.x + x, pos.y + y}]; !ok {
-				return false
-			}
-		}
+func FindSquare(pos Point, size int, grid map[Point]struct{}) bool {
+	if _, ok := grid[Point{pos.x, pos.y}]; !ok {
+		return false
+	}
+	if _, ok := grid[Point{pos.x + size - 1, pos.y}]; !ok {
+		return false
+	}
+	if _, ok := grid[Point{pos.x, pos.y + size - 1}]; !ok {
+		return false
+	}
+	if _, ok := grid[Point{pos.x + size - 1, pos.y + size - 1}]; !ok {
+		return false
 	}
 	return true
 }
@@ -287,7 +292,7 @@ func main() {
 		}
 		for y := ystart; y < yend; y++ {
 			for x := xstart; x < xend; x++ {
-				if Find100(Point{x, y}, points) {
+				if FindSquare(Point{x, y}, 100, points) {
 					fmt.Println(x*10000 + y)
 					return
 				}
