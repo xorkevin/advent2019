@@ -13,21 +13,17 @@ const (
 )
 
 type (
-	Point2 struct {
-		x, y int
-	}
-
 	Point struct {
 		x, y, z int
 	}
 
 	Maze struct {
-		grid      [][]byte
-		ringWidth int
-		size      int
-		tele      map[Point2]Point2
-		start     Point
-		end       Point
+		grid   [][]byte
+		width  int
+		height int
+		tele   map[Point]Point
+		start  Point
+		end    Point
 	}
 )
 
@@ -48,24 +44,33 @@ func isTeleMark(c byte) bool {
 }
 
 func NewMaze(grid [][]byte) *Maze {
-	l := len(grid)
-	mid := l / 2
+	height := len(grid)
+	width := len(grid[0])
+	midHeight := height / 2
+	midWidth := width / 2
+	ringHeight := -1
 	ringWidth := -1
-	for i := 2; i < mid; i++ {
-		if !isMaze(grid[mid][i]) {
+	for i := 2; i < midHeight; i++ {
+		if !isMaze(grid[i][midWidth]) {
+			ringHeight = i - 2
+			break
+		}
+	}
+	for i := 2; i < midWidth; i++ {
+		if !isMaze(grid[midHeight][i]) {
 			ringWidth = i - 2
 			break
 		}
 	}
-	if ringWidth < 0 {
+	if ringWidth < 0 || ringHeight < 0 {
 		log.Fatalln("Invalid map")
 	}
 
-	tele := map[Point2]Point2{}
-	teleEnd := map[string]Point2{}
-	for i := 0; i < l; i++ {
+	tele := map[Point]Point{}
+	teleEnd := map[string]Point{}
+	for i := 0; i < width; i++ {
 		if isTeleMark(grid[0][i]) {
-			p := Point2{i, 2}
+			p := Point{i, 2, 0}
 			mark := string([]byte{grid[0][i], grid[1][i]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
@@ -75,9 +80,9 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
-		if isTeleMark(grid[2+ringWidth][i]) {
-			p := Point2{i, 1 + ringWidth}
-			mark := string([]byte{grid[2+ringWidth][i], grid[3+ringWidth][i]})
+		if isTeleMark(grid[2+ringHeight][i]) {
+			p := Point{i, 1 + ringHeight, 0}
+			mark := string([]byte{grid[2+ringHeight][i], grid[3+ringHeight][i]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
 				tele[v] = p
@@ -86,9 +91,9 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
-		if isTeleMark(grid[l-2][i]) {
-			p := Point2{i, l - 3}
-			mark := string([]byte{grid[l-2][i], grid[l-1][i]})
+		if isTeleMark(grid[height-2][i]) {
+			p := Point{i, height - 3, 0}
+			mark := string([]byte{grid[height-2][i], grid[height-1][i]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
 				tele[v] = p
@@ -97,9 +102,9 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
-		if isTeleMark(grid[l-ringWidth-4][i]) {
-			p := Point2{i, l - ringWidth - 2}
-			mark := string([]byte{grid[l-ringWidth-4][i], grid[l-ringWidth-3][i]})
+		if isTeleMark(grid[height-ringHeight-4][i]) {
+			p := Point{i, height - ringHeight - 2, 0}
+			mark := string([]byte{grid[height-ringHeight-4][i], grid[height-ringHeight-3][i]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
 				tele[v] = p
@@ -108,8 +113,10 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
+	}
+	for i := 0; i < height; i++ {
 		if isTeleMark(grid[i][0]) {
-			p := Point2{2, i}
+			p := Point{2, i, 0}
 			mark := string([]byte{grid[i][0], grid[i][1]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
@@ -120,7 +127,7 @@ func NewMaze(grid [][]byte) *Maze {
 			}
 		}
 		if isTeleMark(grid[i][2+ringWidth]) {
-			p := Point2{1 + ringWidth, i}
+			p := Point{1 + ringWidth, i, 0}
 			mark := string([]byte{grid[i][2+ringWidth], grid[i][3+ringWidth]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
@@ -130,9 +137,9 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
-		if isTeleMark(grid[i][l-2]) {
-			p := Point2{l - 3, i}
-			mark := string([]byte{grid[i][l-2], grid[i][l-1]})
+		if isTeleMark(grid[i][width-2]) {
+			p := Point{width - 3, i, 0}
+			mark := string([]byte{grid[i][width-2], grid[i][width-1]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
 				tele[v] = p
@@ -141,9 +148,9 @@ func NewMaze(grid [][]byte) *Maze {
 				teleEnd[mark] = p
 			}
 		}
-		if isTeleMark(grid[i][l-ringWidth-4]) {
-			p := Point2{l - ringWidth - 2, i}
-			mark := string([]byte{grid[i][l-ringWidth-4], grid[i][l-ringWidth-3]})
+		if isTeleMark(grid[i][width-ringWidth-4]) {
+			p := Point{width - ringWidth - 2, i, 0}
+			mark := string([]byte{grid[i][width-ringWidth-4], grid[i][width-ringWidth-3]})
 			if v, ok := teleEnd[mark]; ok {
 				tele[p] = v
 				tele[v] = p
@@ -164,12 +171,12 @@ func NewMaze(grid [][]byte) *Maze {
 	}
 
 	return &Maze{
-		grid:      grid,
-		ringWidth: ringWidth,
-		size:      l,
-		tele:      tele,
-		start:     Point{start.x, start.y, 0},
-		end:       Point{end.x, end.y, 0},
+		grid:   grid,
+		height: height,
+		width:  width,
+		tele:   tele,
+		start:  Point{start.x, start.y, 0},
+		end:    Point{end.x, end.y, 0},
 	}
 }
 
@@ -278,7 +285,7 @@ func (m *Maze) neighbors(pos Point) []Point {
 	if k := (Point{pos.x + 1, pos.y, 0}); m.isPath(k) {
 		points = append(points, k)
 	}
-	if v, ok := m.tele[Point2{pos.x, pos.y}]; ok {
+	if v, ok := m.tele[Point{pos.x, pos.y, 0}]; ok {
 		points = append(points, Point{v.x, v.y, 0})
 	}
 	return points
@@ -309,7 +316,7 @@ func (m *Maze) isOuter(pos Point) bool {
 	if pos.x == 2 || pos.y == 2 {
 		return true
 	}
-	if pos.x == m.size-3 || pos.y == m.size-3 {
+	if pos.x == m.width-3 || pos.y == m.height-3 {
 		return true
 	}
 	return false
@@ -329,11 +336,12 @@ func (m *Maze) neighbors2(pos Point) []Point {
 	if k := (Point{pos.x + 1, pos.y, pos.z}); m.isPath(k) {
 		points = append(points, k)
 	}
-	if v, ok := m.tele[Point2{pos.x, pos.y}]; ok {
+	if v, ok := m.tele[Point{pos.x, pos.y, 0}]; ok {
 		if m.isOuter(pos) {
 			if pos.z > 0 {
 				k := Point{v.x, v.y, pos.z - 1}
 				points = append(points, k)
+			} else {
 			}
 		} else {
 			k := Point{v.x, v.y, pos.z + 1}
