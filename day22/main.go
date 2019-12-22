@@ -14,6 +14,59 @@ const (
 )
 
 type (
+	Deck struct {
+		cards []int
+		alt   []int
+		size  int
+	}
+)
+
+func NewDeck(num int) *Deck {
+	cards := make([]int, 0, num)
+	for i := 0; i < num; i++ {
+		cards = append(cards, i)
+	}
+	return &Deck{
+		cards: cards,
+		alt:   make([]int, num),
+		size:  num,
+	}
+}
+
+func (d *Deck) DealNew() {
+	l := d.size
+	for i := 0; i < l/2; i++ {
+		d.cards[i], d.cards[l-i-1] = d.cards[l-i-1], d.cards[i]
+	}
+}
+
+func (d *Deck) Cut(n int) {
+	n = (n + d.size) % d.size
+	copy(d.alt, d.cards[n:])
+	copy(d.alt[d.size-n:], d.cards[:n])
+	d.cards, d.alt = d.alt, d.cards
+}
+
+func (d *Deck) DealIncr(incr int) {
+	k := 0
+	l := d.size
+	for _, i := range d.cards {
+		d.alt[k] = i
+		k = (k + incr) % l
+	}
+	d.cards, d.alt = d.alt, d.cards
+}
+
+func (d *Deck) FindCard(c int) int {
+	for n, i := range d.cards {
+		if i == c {
+			return n
+		}
+	}
+	return -1
+}
+
+type (
 	Card struct {
 		card int
 		size int
@@ -55,7 +108,7 @@ func main() {
 		}
 	}()
 
-	deck := NewCard(2019, 10007)
+	deck := NewDeck(10007)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -87,5 +140,5 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(deck.FindCard())
+	fmt.Println(deck.FindCard(2019))
 }
