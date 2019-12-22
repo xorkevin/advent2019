@@ -14,87 +14,36 @@ const (
 )
 
 type (
-	Deck struct {
-		cards []int
-		alt   []int
-		size  int
-	}
-)
-
-func NewDeck(num int) *Deck {
-	cards := make([]int, 0, num)
-	for i := 0; i < num; i++ {
-		cards = append(cards, i)
-	}
-	return &Deck{
-		cards: cards,
-		alt:   make([]int, num),
-		size:  num,
-	}
-}
-
-func (d *Deck) DealNew() {
-	l := d.size
-	for i := 0; i < l/2; i++ {
-		d.cards[i], d.cards[l-i-1] = d.cards[l-i-1], d.cards[i]
-	}
-}
-
-func (d *Deck) Cut(n int) {
-	n = (n + d.size) % d.size
-	copy(d.alt, d.cards[n:])
-	copy(d.alt[d.size-n:], d.cards[:n])
-	d.cards, d.alt = d.alt, d.cards
-}
-
-func (d *Deck) DealIncr(incr int) {
-	k := 0
-	l := d.size
-	for _, i := range d.cards {
-		d.alt[k] = i
-		k = (k + incr) % l
-	}
-	d.cards, d.alt = d.alt, d.cards
-}
-
-func (d *Deck) FindCard(c int) int {
-	for n, i := range d.cards {
-		if i == c {
-			return n
-		}
-	}
-	return -1
-}
-
-type (
 	Card struct {
-		card int
+		a, b int
 		size int
 	}
 )
 
-func NewCard(card, size int) *Card {
+func NewCard(size int) *Card {
 	return &Card{
-		card: card,
+		a:    1,
+		b:    0,
 		size: size,
 	}
 }
 
-func (c *Card) DealNew() {
-	c.card = c.size - c.card - 1
+func (c *Card) Reverse() {
+	c.a = (c.a*-1 + c.size) % c.size
+	c.b = (c.b*-1 - 1 + c.size) % c.size
 }
 
 func (c *Card) Cut(n int) {
-	n = (n + c.size) % c.size
-	c.card = (c.card - n + c.size) % c.size
+	c.b = (c.b - n + c.size) % c.size
 }
 
 func (c *Card) DealIncr(n int) {
-	c.card = (c.card * n) % c.size
+	c.a = (c.a * n) % c.size
+	c.b = (c.b * n) % c.size
 }
 
-func (c *Card) FindCard() int {
-	return c.card
+func (c *Card) FindCard(n int) int {
+	return (n*c.a + c.b) % c.size
 }
 
 func main() {
@@ -108,14 +57,14 @@ func main() {
 		}
 	}()
 
-	deck := NewDeck(10007)
+	deck := NewCard(10007)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.Fields(scanner.Text())
 		if line[0] == "deal" {
 			if line[1] == "into" {
-				deck.DealNew()
+				deck.Reverse()
 			} else if line[1] == "with" {
 				num, err := strconv.Atoi(line[3])
 				if err != nil {
